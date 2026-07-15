@@ -100,6 +100,9 @@ function sunny_wordpress_optimizer_page() {
             background: #fff;
             cursor: pointer;
         }
+        .leftside a.active {
+            background: #fff;
+        }
         .container {
             width: 1200px;
             background: #fff; 
@@ -139,11 +142,12 @@ function sunny_wordpress_optimizer_page() {
     <div style="display: flex;">
         <div class="leftside">
             <h1>🚀 Optimizer</h1>
-            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=database_junk">🗃️ ขยะฐานข้อมูล</a>
-            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=spam_user">👥 ผู้ใช้สแปม</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=database_junk" <?php if(isset($_GET['option']) && $_GET['option'] == "database_junk") { echo "class='active'"; } ?>>🗃️ ขยะฐานข้อมูล</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=spam_user" <?php if(isset($_GET['option']) && $_GET['option'] == "spam_user") { echo "class='active'"; } ?>>👥 ผู้ใช้สแปม</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=inactive_user" <?php if(isset($_GET['option']) && $_GET['option'] == "inactive_user") { echo "class='active'"; } ?>>👥 ผู้ใช้ที่ไม่เคลื่อนไหว</a>
             <h1>⚙️ ตั้งค่า</h1>
-            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=api_blacklist">⛔ API Blacklist</a>
-            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=settings">⚙️ ตั้งค่าปลั้กอิน</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=api_blacklist" <?php if(isset($_GET['option']) && $_GET['option'] == "api_blacklist") { echo "class='active'"; } ?>>⛔ API Blacklist</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=settings" <?php if(isset($_GET['option']) && $_GET['option'] == "settings") { echo "class='active'"; } ?>>⚙️ ตั้งค่าปลั้กอิน</a>
         </div>
         <?php
         if(isset($_GET['option']) && $_GET['option'] == "database_junk") {
@@ -268,6 +272,200 @@ function sunny_wordpress_optimizer_page() {
                 <?php
                     } else {
                         echo '<h2>✅ ยินดีด้วย! ไม่พบ User สแปมในระบบแล้ว</h2>';
+                    }
+                ?>
+            </div>
+        </div>
+        <?php
+        } elseif(isset($_GET['option']) && $_GET['option'] == "spam_user") {
+        ?>
+        <div class="container">
+            <h1>👥 ผู้ใช้ที่เข้าข่ายสแปม (Spam Users)</h1>
+            <div style="padding: 0 25px 25px 25px;">
+                <p>ตรวจสอบผู้ใช้ที่เข้าข่ายสแปม เช่น ผู้ใช้ที่ตั้งชื่อเพื่อโปรโมทเว็บไซต์ภายนอก สามารถจัดการคำที่เข้าข่ายได้ใน Blacklist</p>
+                <?php
+                $spam_words = explode("\n", get_option('sunny_cleanner_blacklist', "cash\nmoney\nbonus\noffer\nprize\nblogspot"));
+                $spam_words = array_map('trim', $spam_words);
+
+                // ขั้นตอนการลบ (เมื่อกดปุ่ม Confirm Delete)
+                if ( isset($_POST['confirm_delete']) ) {
+                    check_admin_referer('wcc_confirm_delete');
+                    $ids_to_delete = explode(',', $_POST['user_ids']);
+                    $count = 0;
+
+                    require_once( ABSPATH . 'wp-admin/includes/user.php' );
+                    foreach ( $ids_to_delete as $user_id ) {
+                        if ( get_current_user_id() == $user_id ) continue;
+                        wp_delete_user( intval($user_id) );
+                        $count++;
+                    }
+                    echo '<div class="updated"><p>กำจัดสแปมออกไปแล้ว <strong>' . $count . '</strong> บัญชี!</p></div>';
+
+                    //ลบแคช
+                    delete_transient('sunny_wordpress_optimizer_health_stats');
+                }
+
+                $found_users = array();
+                foreach ( $spam_words as $word ) {
+                    $results = $wpdb->get_results( $wpdb->prepare(
+                        "SELECT ID, user_login, display_name, user_email FROM $wpdb->users WHERE display_name LIKE %s",
+                        '%' . $wpdb->esc_like($word) . '%'
+                    ) );
+                    if ($results) {
+                        $found_users = array_merge($found_users, $results);
+                    }
+                }
+
+                $found_users = array_unique($found_users, SORT_REGULAR);
+
+                if ( !empty($found_users) ) {
+                ?>
+                <h3>พบ User ที่เข้าข่ายสแปม <?=number_format(count($found_users));?> รายชื่อ</h3>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Login Name</th>
+                            <th>Display Name</th>
+                            <th>Email</th>
+                        </tr>
+                        
+                    </thead>
+                    <tbody>
+                        <?php
+                        $ids_array = array();
+                        foreach ( $found_users as $user ) {
+                            $ids_array[] = $user->ID;
+                        ?>
+                            <tr>
+                                <td><?=$user->ID;?></td>
+                                <td><strong><?=$user->user_login;?></strong></td>
+                                <td><span style='color:red;'><?=$user->display_name;?></span></td>
+                                <td><?=$user->user_email;?></td>
+                            </tr>
+                        <?php
+                        }
+                        ?>
+                    </tbody>
+                </table>
+                <form method="post" style="margin-top:20px;">
+                    <?php wp_nonce_field('wcc_confirm_delete'); ?>
+                    <input type="hidden" name="user_ids" value="<?= implode(',', $ids_array); ?>">
+                    <input type="submit" name="confirm_delete" class="button button-primary" 
+                            value="ลบรายชื่อข้างต้นทั้งหมด" 
+                            onclick="return confirm('ลบผู้ใช้ที่เข้าข่ายสแปมทั้งหมดเลยหรือไม่ ?');">
+                </form>
+                <?php
+                    } else {
+                        echo '<h2>✅ ยินดีด้วย! ไม่พบ User สแปมในระบบแล้ว</h2>';
+                    }
+                ?>
+            </div>
+        </div>
+        <?php
+        } elseif(isset($_GET['option']) && $_GET['option'] == "inactive_user") {
+        ?>
+        <div class="container">
+            <h1>👥 ผู้ใช้ที่ไม่มีการเคลื่อนไหวในระบบ (Inactive Users)</h1>
+            <div style="padding: 0 25px 25px 25px;">
+                <p>ตรวจสอบผู้ใช้ที่ไม่มีการเคลื่อนไหวในระบบ โดยมีเงื่อนไขได้แก่ ไม่มีชื่อนาม-สกุล ไม่มีข้อมูลการสั่งซื้อ ทั้งที่สมัครสมาชิกแล้วไม่ต่ำกว่า 1 ปี</p>
+                <div style="align-items: center; display: flex;">
+                    <select name="filter" id="filter_type">
+                        <option value="email" <?php if(isset($_GET['filter'])) { selected($_GET['filter']); } ?>>Email</option>
+                    </select>
+                    <input type="text" name="value" id="filter_value" value="<?php if(isset($_GET['value'])) { echo $_GET['value']; }?>">
+                    <button class="button button-outline-primary" onclick="window.location.href=`admin.php?page=wordpress-optimizer&option=inactive_user&filter=${document.getElementById('filter_type').value}&value=${document.getElementById('filter_value').value}`">กรอง</button>
+                </div>
+                <?php
+                if ( isset($_POST['confirm_delete']) ) {
+                    check_admin_referer('wcc_confirm_delete');
+                    $ids_to_delete = explode(',', $_POST['user_ids']);
+                    $count = 0;
+
+                    require_once( ABSPATH . 'wp-admin/includes/user.php' );
+                    foreach ( $ids_to_delete as $user_id ) {
+                        if ( get_current_user_id() == $user_id ) continue;
+                        $user = get_userdata(intval($user_id));
+                        if ( !$user || get_current_user_id() == $user_id || in_array('administrator', $user->roles) ) {
+                            continue;
+                        }
+                        wp_delete_user( intval($user_id) );
+                        $count++;
+                    }
+                    echo '<div class="updated"><p>ลบผู้ใช้ที่ไม่เคลื่อนไหวออกแล้ว <strong>' . $count . '</strong> บัญชี!</p></div>';
+                }
+
+                $found_users = array();
+
+                global $wpdb;
+
+                $query = "
+                    SELECT u.ID, u.user_login, u.display_name, u.user_email 
+                    FROM {$wpdb->users} AS u
+                    LEFT JOIN {$wpdb->prefix}posts AS p ON (p.post_author = u.ID AND p.post_type = 'shop_order')
+                    LEFT JOIN {$wpdb->usermeta} AS meta_first ON (u.ID = meta_first.user_id AND meta_first.meta_key = 'first_name')
+                    LEFT JOIN {$wpdb->usermeta} AS meta_last ON (u.ID = meta_last.user_id AND meta_last.meta_key = 'last_name')
+                    
+                    WHERE p.ID IS NULL
+                    AND (
+                        (meta_first.meta_value IS NULL OR meta_first.meta_value = '') 
+                        OR 
+                        (meta_last.meta_value IS NULL OR meta_last.meta_value = '')
+                    )
+                    AND u.user_registered < DATE_SUB(NOW(), INTERVAL 1 YEAR)
+                    AND u.user_login NOT LIKE '%admin%'
+                    AND u.user_login NOT LIKE '%seo%'
+                    AND u.user_login NOT LIKE '%editor%'
+                ";
+
+                if ( isset($_GET['filter']) && $_GET['filter'] == "email" ) {
+                    if ( !empty($_GET['value']) ) {
+                        $email_val = '%' . $wpdb->esc_like($_GET['value']) . '%';
+                        $query .= $wpdb->prepare(" AND u.user_email LIKE %s ", $email_val);
+                    }
+                }
+
+                $found_users = $wpdb->get_results($query);
+
+                if ( !empty($found_users) ) {
+                ?>
+                <h3>พบ User ไม่มีการเคลื่อนไหวในระบบ <?=number_format(count($found_users));?> รายชื่อ</h3>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Login Name</th>
+                            <th>Display Name</th>
+                            <th>Email</th>
+                        </tr>  
+                    </thead>
+                    <tbody>
+                        <?php
+                        $ids_array = array();
+                        foreach ( $found_users as $user ) {
+                            $ids_array[] = $user->ID;
+                        ?>
+                            <tr>
+                                <td><?=$user->ID;?></td>
+                                <td><strong><?=$user->user_login;?></strong></td>
+                                <td><span style='color:red;'><?=$user->display_name;?></span></td>
+                                <td><?=$user->user_email;?></td>
+                            </tr>
+                        <?php
+                        }
+                        ?>
+                    </tbody>
+                </table>
+                <form method="post" style="margin-top:20px;">
+                    <?php wp_nonce_field('wcc_confirm_delete'); ?>
+                    <input type="hidden" name="user_ids" value="<?= implode(',', $ids_array); ?>">
+                    <input type="submit" name="confirm_delete" class="button button-primary" 
+                            value="ลบรายชื่อข้างต้นทั้งหมด" 
+                            onclick="return confirm('ลบผู้ใช้ที่เข้าข่ายไม่เคลื่อนไหวทั้งหมดเลยหรือไม่ ?');">
+                </form>
+                <?php
+                    } else {
+                        echo '<h2>✅ ยินดีด้วย! ไม่พบ User ตามที่เลือกในระบบแล้ว</h2>';
                     }
                 ?>
             </div>
