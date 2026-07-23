@@ -15,8 +15,8 @@ add_action( 'admin_menu', 'sunny_wordpress_cleaner_menu' );
 
 function sunny_wordpress_cleaner_menu() {
     add_menu_page(
-        'Sunny\'s Wordpress Optimizer', // Title ของหน้า
-        'Wordpress Optimizer', // ชื่อเมนูที่โชว์ในแถบข้าง
+        'Sunny\'s WordPress Optimizer', // Title ของหน้า
+        'WordPress Optimizer', // ชื่อเมนูที่โชว์ในแถบข้าง
         'manage_options', //สิทธิ์การเข้าถึง (Admin)
         'wordpress-optimizer', // Slug ของหน้า
         'sunny_wordpress_optimizer_page', // ฟังก์ชันที่ใช้พ่น HTML หน้า Setting
@@ -723,3 +723,14 @@ add_filter( 'pre_http_request', function( $pre, $args, $url ) {
     }
     return $pre;
 }, 10, 3 );
+
+/**
+ * Silence the WP 6.7 _load_textdomain_just_in_time doing_it_wrong notice
+ * for abandoned plugins and themes.
+ */
+add_filter( 'doing_it_wrong_trigger_error', function( $trigger, $function_name ) {
+    if ( $function_name === '_load_textdomain_just_in_time' ) {
+        return false; // Suppresses this specific notice
+    }
+    return $trigger;
+}, 10, 2 );
