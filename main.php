@@ -564,6 +564,94 @@ function sunny_wordpress_optimizer_page() {
 <?php
 }
 
+function sunny_optimizer_get_blacklist_words() {
+    $raw_blacklist = get_option('sunny_cleanner_blacklist', "cash\nmoney\nbonus\noffer\nprize\nblogspot");
+
+    if ( ! is_string($raw_blacklist) ) {
+        return array();
+    }
+
+    $words = preg_split('/\r\n|\r|\n/', $raw_blacklist);
+    $clean_words = array();
+
+    if ( empty($words) ) {
+        return $clean_words;
+    }
+
+    foreach ( $words as $word ) {
+        $word = trim($word);
+        if ( $word !== '' ) {
+            $clean_words[] = strtolower($word);
+        }
+    }
+
+    return array_values(array_unique($clean_words));
+}
+
+function sunny_optimizer_contains_blacklisted_text( $text ) {
+    if ( ! is_string($text) || $text === '' ) {
+        return false;
+    }
+
+    $text = strtolower($text);
+    $words = sunny_optimizer_get_blacklist_words();
+
+    foreach ( $words as $word ) {
+        if ( strpos($text, $word) !== false ) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function sunny_optimizer_block_blacklisted_registration( $errors, $sanitized_user_login, $user_email ) {
+    if ( ! is_wp_error($errors) ) {
+        $errors = new WP_Error();
+    }
+
+    if ( ! empty($errors->errors) ) {
+        return $errors;
+    }
+
+    $candidate_fields = array();
+
+    if ( isset($_POST['user_login']) ) {
+        $candidate_fields[] = sanitize_text_field( wp_unslash($_POST['user_login']) );
+    }
+
+    if ( isset($_POST['display_name']) ) {
+        $candidate_fields[] = sanitize_text_field( wp_unslash($_POST['display_name']) );
+    }
+
+    if ( isset($_POST['first_name']) ) {
+        $candidate_fields[] = sanitize_text_field( wp_unslash($_POST['first_name']) );
+    }
+
+    if ( isset($_POST['last_name']) ) {
+        $candidate_fields[] = sanitize_text_field( wp_unslash($_POST['last_name']) );
+    }
+
+    if ( isset($_POST['nickname']) ) {
+        $candidate_fields[] = sanitize_text_field( wp_unslash($_POST['nickname']) );
+    }
+
+    $candidate_fields[] = $sanitized_user_login;
+    $candidate_fields[] = $user_email;
+
+    foreach ( $candidate_fields as $field ) {
+        if ( sunny_optimizer_contains_blacklisted_text($field) ) {
+            $errors->add('sunny_blacklist_blocked', __('การสมัครสมาชิกถูกบล็อคเนื่องจากข้อมูลมีคำที่อยู่ใน blacklist ของปลั้กอิน', 'sunny-wordpress-optimizer'));
+            break;
+        }
+    }
+
+    return $errors;
+}
+
+add_filter('registration_errors', 'sunny_optimizer_block_blacklisted_registration', 10, 3);
+add_filter('woocommerce_registration_errors', 'sunny_optimizer_block_blacklisted_registration', 10, 3);
+
 add_action('admin_init', 'sunny_optimizer_settings_init');
 
 function sunny_optimizer_settings_init() {
