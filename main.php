@@ -778,34 +778,44 @@ add_filter('woocommerce_registration_errors', 'sunny_optimizer_block_blacklisted
 /**
  * Block login if user's display name is in User Blacklist
 */
+/**
+ * Block login if user's Username (user_login) is in User Blacklist
+ * ปรับปรุงให้เช็คจาก Username แทน
+ */
 function sunny_optimizer_block_blacklisted_login( $user, $password ) {
+    // ป้องกัน Error หากไม่มี Object
     if ( ! is_object($user) || ! is_a($user, 'WP_User') ) {
         return $user;
     }
 
+    // ดึง Blacklist 
     $raw_blacklist = get_option('sunny_user_blacklist', '');
     if ( empty($raw_blacklist) ) {
         return $user;
     }
 
+    // แยกรายชื่อและทำให้สะอาด
     $blacklist_names = array_filter(array_map('trim', explode("\n", $raw_blacklist)));
     if ( empty($blacklist_names) ) {
         return $user;
     }
 
-    $user_display_name = isset($user->display_name) ? strtolower(trim($user->display_name)) : '';
-    if ( empty($user_display_name) ) {
+    // เปลี่ยนมาดึงค่าจาก user_login แทน display_name
+    $user_login_name = isset($user->user_login) ? strtolower(trim($user->user_login)) : '';
+    if ( empty($user_login_name) ) {
         return $user;
     }
 
     // ตรวจสอบรายชื่อแต่ละอันในรายการ Blacklist
     foreach ( $blacklist_names as $blacklist_name ) {
         $blacklist_name_lower = strtolower(trim($blacklist_name));
-        if ( empty($blacklist_name_lower) ) continue;
+        if ( empty($blacklist_name_lower) ) {
+            continue;
+        }
         
-        // ตรวจสอบการตรงกัน
-        if ( $user_display_name === $blacklist_name_lower || 
-             strpos($user_display_name, $blacklist_name_lower) !== false ) {
+        // ตรวจสอบการตรงกันโดยใช้ $user_login_name
+        if ( $user_login_name === $blacklist_name_lower || 
+             strpos($user_login_name, $blacklist_name_lower) !== false ) {
             
             return new WP_Error(
                 'sunny_user_blacklist_blocked',
@@ -816,6 +826,8 @@ function sunny_optimizer_block_blacklisted_login( $user, $password ) {
 
     return $user;
 }
+
+add_filter('wp_authenticate_user', 'sunny_optimizer_block_blacklisted_login', 10, 2);
 
 // จุดสำคัญ: ต้องเปลี่ยนเลข 3 ด้านหลังเป็นเลข 2 
 add_filter('wp_authenticate_user', 'sunny_optimizer_block_blacklisted_login', 10, 2);
