@@ -145,6 +145,7 @@ function sunny_wordpress_optimizer_page() {
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=database_junk" <?php if(isset($_GET['option']) && $_GET['option'] == "database_junk") { echo "class='active'"; } ?>>🗃️ ขยะฐานข้อมูล</a>
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=spam_user" <?php if(isset($_GET['option']) && $_GET['option'] == "spam_user") { echo "class='active'"; } ?>>👥 ผู้ใช้สแปม</a>
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=inactive_user" <?php if(isset($_GET['option']) && $_GET['option'] == "inactive_user") { echo "class='active'"; } ?>>👥 ผู้ใช้ที่ไม่เคลื่อนไหว</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=user_blacklist" <?php if(isset($_GET['option']) && $_GET['option'] == "user_blacklist") { echo "class='active'"; } ?>>🔒 User Blacklist</a>
             <h1>⚙️ ตั้งค่า</h1>
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=api_blacklist" <?php if(isset($_GET['option']) && $_GET['option'] == "api_blacklist") { echo "class='active'"; } ?>>⛔ API Blacklist</a>
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=settings" <?php if(isset($_GET['option']) && $_GET['option'] == "settings") { echo "class='active'"; } ?>>⚙️ ตั้งค่าปลั้กอิน</a>
@@ -471,6 +472,119 @@ function sunny_wordpress_optimizer_page() {
             </div>
         </div>
         <?php
+        } elseif(isset($_GET['option']) && $_GET['option'] == "user_blacklist") {
+        ?>
+        <div class="container">
+            <h1>🔒 User Blacklist - บล็อคการเข้าสู่ระบบ</h1>
+            <div style="padding: 0 25px 25px 25px;">
+                <p>ระบบ Blacklist เพื่อบล็อคการเข้าสู่ระบบ หากชื่อ Display Name ตรงกับรายชื่อในรายการบล็อก หากผู้ใช้พยายามเข้าสู่ระบบ จะถูกบล็อกทันที</p>
+                <?php
+                // Handle form submission to save blacklist
+                if ( isset($_POST['save_user_blacklist']) ) {
+                    check_admin_referer('wcc_save_user_blacklist');
+                    $blacklist_text = isset($_POST['user_blacklist_names']) ? sanitize_textarea_field(wp_unslash($_POST['user_blacklist_names'])) : '';
+                    update_option('sunny_user_blacklist', $blacklist_text);
+                    echo '<div class="updated"><p>บันทึกรายชื่อ Blacklist เรียบร้อยแล้ว!</p></div>';
+                    delete_transient('sunny_wordpress_optimizer_health_stats');
+                }
+
+                $blacklist_text = get_option('sunny_user_blacklist', '');
+                $blacklist_names = array_filter(array_map('trim', explode("\n", $blacklist_text)));
+                ?>
+                <h3>📝 เพิ่ม/แก้ไข Display Name Blacklist</h3>
+                <form method="post" style="margin: 20px 0;">
+                    <?php wp_nonce_field('wcc_save_user_blacklist'); ?>
+                    <p><strong>ป้อนชื่อ Display Name (บรรทัดละ 1 ชื่อ)</strong></p>
+                    <textarea name="user_blacklist_names" style="width: 100%; height: 300px; font-family: monospace;"><?php echo esc_textarea($blacklist_text); ?></textarea>
+                    <br><br>
+                    <input type="submit" name="save_user_blacklist" class="button button-primary" value="บันทึก Blacklist">
+                </form>
+
+                <h3>📊 รายชื่อที่ถูกบล็อก (<?php echo count($blacklist_names); ?> รายชื่อ)</h3>
+                <?php if ( !empty($blacklist_names) ) { ?>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th style="width: 50px;">ลำดับ</th>
+                            <th>Display Name</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        $number = 1;
+                        foreach ( $blacklist_names as $name ) {
+                        ?>
+                            <tr>
+                                <td><?php echo $number++; ?></td>
+                                <td><span style="color: red; font-weight: bold;"><?php echo esc_html($name); ?></span></td>
+                            </tr>
+                        <?php
+                        }
+                        ?>
+                    </tbody>
+                </table>
+                <?php
+                    } else {
+                        echo '<p style="color: green;"><strong>✅ ยังไม่มีชื่อใดถูกบล็อก</strong></p>';
+                    }
+                ?>
+
+                <h3>🔍 ตรวจสอบผู้ใช้ที่อาจถูกบล็อก</h3>
+                <?php
+                global $wpdb;
+                $blocked_users = array();
+                
+                if ( !empty($blacklist_names) ) {
+                    $users = $wpdb->get_results("SELECT ID, user_login, display_name, user_email FROM $wpdb->users");
+                    foreach ( $users as $user ) {
+                        foreach ( $blacklist_names as $blacklist_name ) {
+                            // Case-insensitive exact or partial match
+                            if ( strtolower($user->display_name) === strtolower($blacklist_name) || 
+                                 stripos($user->display_name, $blacklist_name) !== false ) {
+                                $blocked_users[] = $user;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if ( !empty($blocked_users) ) {
+                ?>
+                <table class="wp-list-table widefat fixed striped">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Login Name</th>
+                            <th>Display Name</th>
+                            <th>Email</th>
+                            <th>สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php
+                        foreach ( $blocked_users as $user ) {
+                        ?>
+                            <tr>
+                                <td><?php echo $user->ID; ?></td>
+                                <td><strong><?php echo esc_html($user->user_login); ?></strong></td>
+                                <td><span style="color: red; font-weight: bold;"><?php echo esc_html($user->display_name); ?></span></td>
+                                <td><?php echo esc_html($user->user_email); ?></td>
+                                <td><span style="background: #ffcccc; padding: 5px 10px; border-radius: 3px;">🚫 ถูกบล็อก</span></td>
+                            </tr>
+                        <?php
+                        }
+                        ?>
+                    </tbody>
+                </table>
+                <p style="color: #d32f2f; margin-top: 20px;"><strong>⚠️ ผู้ใช้ข้างต้นจะไม่สามารถเข้าสู่ระบบได้</strong></p>
+                <?php
+                    } else {
+                        echo '<p style="color: green;"><strong>✅ ไม่พบผู้ใช้ที่ถูกบล็อกในระบบ</strong></p>';
+                    }
+                ?>
+            </div>
+        </div>
+        <?php
         } elseif(isset($_GET['option']) && $_GET['option'] == "settings") {
         ?>
         <div class="container">
@@ -661,6 +775,44 @@ function sunny_optimizer_block_blacklisted_registration( $errors, $sanitized_use
 add_filter('registration_errors', 'sunny_optimizer_block_blacklisted_registration', 10, 3);
 add_filter('woocommerce_registration_errors', 'sunny_optimizer_block_blacklisted_registration', 10, 3);
 
+/**
+ * Block login if user's display name is in User Blacklist
+ * ฟังก์ชันนี้จะบล็อคการเข้าสู่ระบบหากชื่อ Display Name ตรงกับรายชื่อ Blacklist
+ */
+function sunny_optimizer_block_blacklisted_login( $user, $username, $password ) {
+    if ( is_wp_error($user) ) {
+        return $user;
+    }
+
+    if ( !is_a($user, 'WP_User') ) {
+        return $user;
+    }
+
+    $raw_blacklist = get_option('sunny_user_blacklist', '');
+    if ( empty($raw_blacklist) ) {
+        return $user;
+    }
+
+    $blacklist_names = array_filter(array_map('trim', explode("\n", $raw_blacklist)));
+    $user_display_name = strtolower($user->display_name);
+
+    foreach ( $blacklist_names as $blacklist_name ) {
+        $blacklist_name_lower = strtolower($blacklist_name);
+        // ตรวจสอบการตรงกันแบบ Exact หรือ Partial Match
+        if ( $user_display_name === $blacklist_name_lower || 
+             strpos($user_display_name, $blacklist_name_lower) !== false ) {
+            return new WP_Error(
+                'sunny_user_blacklist_blocked',
+                __('บัญชีผู้ใช้นี้ถูกบล็อคจากการเข้าสู่ระบบ (User account has been blocked)', 'sunny-wordpress-optimizer')
+            );
+        }
+    }
+
+    return $user;
+}
+
+add_filter('wp_authenticate_user', 'sunny_optimizer_block_blacklisted_login', 10, 3);
+
 add_action('admin_init', 'sunny_optimizer_settings_init');
 
 function sunny_optimizer_settings_init() {
@@ -668,6 +820,7 @@ function sunny_optimizer_settings_init() {
     register_setting('sunny_optimizer_settings_group', 'sunny_cleanner_disable_external_api');
     register_setting('sunny_optimizer_settings_group', 'sunny_cleanner_disable_wordpress_external_api');
     register_setting('sunny_optimizer_api_blacklist_group', 'sunny_cleanner_api_blacklist');
+    register_setting('sunny_optimizer_user_blacklist_group', 'sunny_user_blacklist');
 }
 
 /**
