@@ -495,11 +495,20 @@ function sunny_wordpress_optimizer_page() {
                                 </td>
                             </tr>
                             <tr>
-                                <td><strong>ปิดใช้งานการติดต่อ API ภายนอก</strong> *ต้องปิดใช้งานฟีเจอร์นี้ชั่วคราว จึงจะสามารถติดตั้งปลั้กอินใหม่ได้</td>
+                                <td><strong>ปิดใช้งานการติดต่อ WordPress API</strong> *ต้องปิดใช้งานฟีเจอร์นี้ชั่วคราว จึงจะสามารถติดตั้งปลั้กอินใหม่ได้</td>
+                                <td>
+                                    <select name="sunny_cleanner_disable_wordpress_external_api" id="">
+                                        <option value="yes" <?php if(get_option('sunny_cleanner_disable_wordpress_external_api', 'no') == "yes") { echo "selected";} ?>>ป้องกันติดต่อ WordPress API</option>
+                                        <option value="no" <?php if(get_option('sunny_cleanner_disable_wordpress_external_api', 'no') == "no") { echo "selected";} ?>>ยอมเปิดติดต่อ WordPress API</option>
+                                    </select>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td><strong>ปิดใช้งานการติดต่อ API ภายนอกจาก Blacklist</strong></td>
                                 <td>
                                     <select name="sunny_cleanner_disable_external_api" id="">
-                                        <option value="yes" <?php if(get_option('sunny_cleanner_disable_external_api', 'no') == "yes") { echo "selected";} ?>>ป้องกันติดต่อ WordPress API</option>
-                                        <option value="no" <?php if(get_option('sunny_cleanner_disable_external_api', 'no') == "no") { echo "selected";} ?>>ยอมเปิดติดต่อ WordPress API</option>
+                                        <option value="yes" <?php if(get_option('sunny_cleanner_disable_external_api', 'no') == "yes") { echo "selected";} ?>>ป้องกันติดต่อ API ภายนอก</option>
+                                        <option value="no" <?php if(get_option('sunny_cleanner_disable_external_api', 'no') == "no") { echo "selected";} ?>>ยอมเปิดติดต่อ API ภายนอก</option>
                                     </select>
                                 </td>
                             </tr>
@@ -657,6 +666,7 @@ add_action('admin_init', 'sunny_optimizer_settings_init');
 function sunny_optimizer_settings_init() {
     register_setting('sunny_optimizer_settings_group', 'sunny_cleanner_blacklist');
     register_setting('sunny_optimizer_settings_group', 'sunny_cleanner_disable_external_api');
+    register_setting('sunny_optimizer_settings_group', 'sunny_cleanner_disable_wordpress_external_api');
     register_setting('sunny_optimizer_api_blacklist_group', 'sunny_cleanner_api_blacklist');
 }
 
@@ -673,8 +683,8 @@ add_filter( 'pre_http_request', function( $pre, $args, $url ) {
             'theme-install.php'
         );
 
-        if ( in_array( $pagenow, $allowed_pages ) ||  get_option('sunny_cleanner_disable_external_api', 'no') == "no") {
-            return $pre; // ปล่อยให้ผ่านไปได้ ปกติ
+        if ( in_array( $pagenow, $allowed_pages ) ||  get_option('sunny_cleanner_disable_wordpress_external_api', 'no') == "no") {
+            return $pre;
         }
     }
 
@@ -689,17 +699,16 @@ add_filter( 'pre_http_request', function( $pre, $args, $url ) {
  * Block External API Requests
  */
 add_filter( 'pre_http_request', function( $pre, $args, $url ) {
-    // 1. ดักไว้เลย ถ้า $url ไม่ใช่ String ให้คืนค่าเดิมทันที
+    if(get_option('sunny_cleanner_disable_external_api') == "no") {
+        return $pre;
+    }
     if ( ! is_string( $url ) ) {
         return $pre;
     }
-
-    // 2. ดักไว้ถ้ามันเป็น Internal Request ของ WordPress เอง (ป้องกันลูปนรก)
     if ( strpos( $url, site_url() ) !== false ) {
         return $pre;
     }
-
-    // 3. ใช้ @ ครอบ get_option เผื่อในจังหวะที่ Database ยังไม่เชื่อมต่อ
+    // ใช้ @ ครอบ get_option เผื่อในจังหวะที่ Database ยังไม่เชื่อมต่อ
     $raw_blacklist = @get_option('sunny_cleanner_api_blacklist', '');
     if ( empty( $raw_blacklist ) && strpos( $url, 'woocommerce.json' ) === false ) {
         return $pre;
@@ -710,8 +719,6 @@ add_filter( 'pre_http_request', function( $pre, $args, $url ) {
     foreach( $blacklists as $blacklist ) {
         $blacklist = trim( $blacklist );
         if ( empty( $blacklist ) ) continue;
-
-        // ถ้าตรงกับ Blacklist หรือ Woo ให้ Block
         if ( strpos( $url, $blacklist ) !== false || strpos( $url, 'woocommerce.json' ) !== false ) {
             return new WP_Error( 'http_request_failed', 'Blocked for speed optimization!' );
         }
@@ -722,7 +729,7 @@ add_filter( 'pre_http_request', function( $pre, $args, $url ) {
 
 
 add_filter( 'pre_http_request', function( $pre, $args, $url ) {
-    if( get_option('sunny_cleanner_disable_external_api', 'no') == "yes") {
+    if( get_option('sunny_cleanner_disable_wordpress_external_api', 'no') == "yes") {
         if ( strpos( $url, 'api.wordpress.org/plugins/info' ) !== false && strpos( $url, 'woocommerce' ) !== false ) {
             return new WP_Error( 'blocked_request', 'Force blocked for speed', array( 'status' => 403 ) );
         }
