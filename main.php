@@ -148,6 +148,7 @@ function sunny_wordpress_optimizer_page() {
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=user_blacklist" <?php if(isset($_GET['option']) && $_GET['option'] == "user_blacklist") { echo "class='active'"; } ?>>🔒 User Blacklist</a>
             <h1>⚙️ ตั้งค่า</h1>
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=api_blacklist" <?php if(isset($_GET['option']) && $_GET['option'] == "api_blacklist") { echo "class='active'"; } ?>>⛔ API Blacklist</a>
+            <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=debug_log" <?php if(isset($_GET['option']) && $_GET['option'] == "debug_log") { echo "class='active'"; } ?>>🐞 Debug Log</a>
             <a href="/wp-admin/admin.php?page=wordpress-optimizer&option=settings" <?php if(isset($_GET['option']) && $_GET['option'] == "settings") { echo "class='active'"; } ?>>⚙️ ตั้งค่าปลั้กอิน</a>
         </div>
         <?php
@@ -662,7 +663,46 @@ function sunny_wordpress_optimizer_page() {
                 </form>
             </div>
         </div>
-    <?php
+        <?php
+        } elseif(isset($_GET['option']) && $_GET['option'] == "debug_log") {
+            if ( ! current_user_can( 'manage_options' ) ) {
+                return;
+            }
+
+            $log_file_path = WP_CONTENT_DIR . '/debug.log';
+
+            if ( isset( $_POST['clear_log'] ) && check_admin_referer( 'sys_clear_debug_log_action', 'sys_clear_log_nonce' ) ) {
+                file_put_contents( $log_file_path, '' );
+                echo '<div class="updated"><p>ล้างข้อมูลใน debug.log เรียบร้อยแล้ว!</p></div>';
+            }
+        ?>
+        <div class="container">
+            <h1>🐞 WP Debug Log Viewer</h1>
+            <div style="padding: 25px 25px 25px 25px;">
+                <span style="display:flex; justify-content:space-between; align-items:center;">
+                <?php if ( file_exists( $log_file_path ) ) : ?>
+                    <form method="post" style="margin:0;">
+                        <?php wp_nonce_field( 'sys_clear_debug_log_action', 'sys_clear_log_nonce' ); ?>
+                        <input type="submit" name="clear_log" class="button button-secondary" value="🗑️ ล้างไฟล์ Log ทั้งหมด" onclick="return confirm('คุณแน่ใจหรือไม่ว่าต้องการลบ Log ทั้งหมด?');">
+                    </form>
+                <?php endif; ?>
+                </span>
+
+                <?php if ( ! file_exists( $log_file_path ) ) { ?>
+                    <div class="notice notice-warning"><p>ไม่พบไฟล์ <code>debug.log</code> (อาจจะยังไม่มี Error เกิดขึ้น หรือยังไม่ได้เปิด <code>WP_DEBUG_LOG</code> ใน <code>wp-config.php</code>)</p></div>
+                <?php } else { ?>
+                    <?php
+                    $file_lines = file( $log_file_path );
+                    $recent_lines = array_slice( $file_lines, -200 ); 
+                    $log_content = implode( '', array_reverse( $recent_lines ) );
+                    ?>
+                    
+                    <p>แสดงผล <strong>200 บรรทัดล่าสุด</strong> (รายการล่าสุดอยู่ด้านบน):</p>
+                    <textarea readonly style="width: 100%; height: 600px; font-family: monospace; font-size: 13px; background: #f1f1f1; color: #333; padding: 15px; border-radius: 5px; line-height: 1.5;"><?php echo esc_textarea( $log_content ); ?></textarea>
+                <?php } ?>
+            </div>
+        </div>
+        <?php
         } else {
         ?>
         <div class="container">
