@@ -8,6 +8,7 @@
  * Plugin URI: https://github.com/sunny420x/wordpress-optimizer
  * GitHub Plugin URI: https://github.com/sunny420x/wordpress-optimizer
  * Primary Branch: master
+ * Version: 1.0.0
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
