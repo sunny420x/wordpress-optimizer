@@ -6,6 +6,8 @@
  * Author: Jirakit Pawnsakunrungrot
  * Author URI: https://www.linkedin.com/in/sunny-jirakit
  * Plugin URI: https://github.com/sunny420x/wordpress-optimizer
+ * GitHub Plugin URI: https://github.com/sunny420x/wordpress-optimizer
+ * Primary Branch: master
  */
 
 if ( ! defined( 'ABSPATH' ) ) exit;
